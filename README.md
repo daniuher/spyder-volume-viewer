@@ -4,7 +4,7 @@
 
 
 # spyder-volume-viewer
-Spyder plugin for viewing multi-dimensional numpy arrays.  
+Spyder plugin for viewing 2D, 3D, and 4D numpy arrays.  
 This is a **work in progress**. First stable release (version 1.0.0) is planned for April 2026.
 
 ### Limitations
