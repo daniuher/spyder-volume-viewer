@@ -1,7 +1,6 @@
 ![Version](https://img.shields.io/github/v/release/daniuher/spyder-volume-viewer)
 ![Status](https://img.shields.io/badge/status-alpha-orange)
 ![License](https://img.shields.io/github/license/daniuher/spyder-volume-viewer)
-![Platform](https://img.shields.io/badge/platform-linux-lightgrey)
 
 
 # spyder-volume-viewer
