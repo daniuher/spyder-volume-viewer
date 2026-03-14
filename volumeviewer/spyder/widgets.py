@@ -1,68 +1,74 @@
 # -*- coding: utf-8 -*-
 # ----------------------------------------------------------------------------
 # Copyright © 2026, fried-pineapple0
-#
 # Licensed under the terms of the GNU General Public License v3
 # ----------------------------------------------------------------------------
 """
 VolumeViewer Main Widget.
 """
 
-
 # Third party imports
-from qtpy.QtWidgets import (QHBoxLayout, QLabel, 
-                            QPushButton, QSplitter, 
-                            QListWidgetItem, QPushButton, 
-                            QLabel, QSizePolicy,
-                            QListWidget, QWidget,
-                            QVBoxLayout)
-
+from qtpy.QtWidgets import (
+    QHBoxLayout, QLabel, QPushButton, QSplitter,
+    QListWidgetItem, QSizePolicy, QListWidget,
+    QWidget, QVBoxLayout, QCheckBox, QSlider
+)
 from qtpy.QtCore import Qt, QEvent
-
 from qtpy.QtGui import QImage, QPixmap, QPainter
 
-# other
 import numpy as np
 
 # Spyder imports
 from spyder.api.config.decorators import on_conf_change
 from spyder.api.translations import get_translation
-
 from spyder.api.widgets.main_widget import PluginMainWidget
-
-# Matplotlib Qt backend
-from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
-from matplotlib.figure import Figure
+from qtpy.QtWidgets import QMessageBox
 
 import matplotlib.cm as mcm
 
-
-# Localization
 _ = get_translation("volumeviewer.spyder")
 
 
+# ---------------------------------------------------------------------------
+# ImageCanvas
+# ---------------------------------------------------------------------------
+
 class ImageCanvas(QWidget):
     """
-    Displays a single 2D float array using Qt native painting.
-    Extend paintEvent for overlays, crosshair, MPR viewports, etc.
+    QPainter-based 2D slice viewer with optional overlay compositing.
+
+    Base image and overlay are each converted to a QPixmap once per slice
+    change (in _rebuild_*_pixmap). paintEvent only does two drawPixmap calls,
+    keeping the paint path allocation-free.
     """
+
+    OVERLAY_ALPHA = 255  # 0-255 global overlay opacity
 
     def __init__(self, parent=None):
         super().__init__(parent)
+
+        # Base
         self._pixmap = None
-        self._raw_slice = None      # float32 (H, W) — image convention
+        self._raw_slice = None          # float32 (H, W), image convention
         self._vmin = 0.0
         self._vmax = 1.0
         self._cmap = mcm.get_cmap("gray")
+
+        # Overlay
+        self._overlay_pixmap = None
+        self._overlay_slice = None      # float32 (H, W) or None
+        self._overlay_cmap = mcm.get_cmap("hot")
+        self._overlay_vmin = 0.0
+        self._overlay_vmax = 1.0
+        self._overlay_transp_bg = False  # zero-voxels → fully transparent
+
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.setMinimumSize(64, 64)
         self.setStyleSheet("background-color: black;")
 
+    # --- Base image API ---
+
     def set_slice(self, arr2d: np.ndarray):
-        """
-        arr2d: 2D array in array indexing convention (X, Y).
-        Transposed here to (row=Y, col=X) for correct image display.
-        """
         self._raw_slice = np.asarray(arr2d.T, dtype=np.float32)
         self._rebuild_pixmap()
         self.update()
@@ -78,30 +84,74 @@ class ImageCanvas(QWidget):
         self._rebuild_pixmap()
         self.update()
 
+    # --- Overlay API ---
+
+    def set_overlay_slice(self, arr2d: np.ndarray):
+        """arr2d in array indexing (X, Y); transposed internally."""
+        self._overlay_slice = np.asarray(arr2d.T, dtype=np.float32)
+        self._rebuild_overlay_pixmap()
+        self.update()
+
+    def set_overlay_params(self, vmin: float, vmax: float, cmap_name: str = "hot"):
+        self._overlay_vmin = vmin
+        self._overlay_vmax = vmax
+        self._overlay_cmap = mcm.get_cmap(cmap_name)
+        self._rebuild_overlay_pixmap()
+        self.update()
+
+    def set_overlay_transp_bg(self, enabled: bool):
+        self._overlay_transp_bg = enabled
+        self._rebuild_overlay_pixmap()
+        self.update()
+
+    def clear_overlay(self):
+        self._overlay_slice = None
+        self._overlay_pixmap = None
+        self.update()
+
+    # --- Internal pixmap builders ---
+
     def _rebuild_pixmap(self):
         if self._raw_slice is None:
             return
-
-        # 1. Window/level normalization
-        span = self._vmax - self._vmin
-        if span == 0.0:
-            span = 1.0
+        span = self._vmax - self._vmin or 1.0
         norm = np.clip((self._raw_slice - self._vmin) / span, 0.0, 1.0)
-
-        # 2. Colormap → RGBA uint8
-        # matplotlib cmap returns float64 (H, W, 4) in [0,1]
-        rgba = (self._cmap(norm) * 255).astype(np.uint8)
-        rgba = np.ascontiguousarray(rgba)   # must be C-contiguous for QImage
-
-        # 3. QImage wraps the buffer — call fromImage immediately to deep-copy
-        #    into Qt memory before the numpy array can be GC'd
+        rgba = np.ascontiguousarray((self._cmap(norm) * 255).astype(np.uint8))
         h, w = rgba.shape[:2]
         qimg = QImage(rgba.data, w, h, 4 * w, QImage.Format_RGBA8888)
         self._pixmap = QPixmap.fromImage(qimg).scaled(
-            self.size(),
-            Qt.KeepAspectRatio,
-            Qt.SmoothTransformation
+            self.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation
         )
+
+    def _rebuild_overlay_pixmap(self):
+        if self._overlay_slice is None:
+            self._overlay_pixmap = None
+            return
+
+        span = self._overlay_vmax - self._overlay_vmin or 1.0
+        norm = np.clip(
+            (self._overlay_slice - self._overlay_vmin) / span, 0.0, 1.0
+        )
+
+        # RGBA float → uint8
+        rgba = (self._overlay_cmap(norm) * 255).astype(np.uint8)
+
+        # Bake per-voxel alpha into the A channel
+        if self._overlay_transp_bg:
+            # Zero source voxels → fully transparent; others → OVERLAY_ALPHA
+            mask = self._overlay_slice > 0
+            rgba[..., 3] = np.where(mask, self.OVERLAY_ALPHA, 0).astype(np.uint8)
+        else:
+            rgba[..., 3] = self.OVERLAY_ALPHA
+
+        rgba = np.ascontiguousarray(rgba)
+        h, w = rgba.shape[:2]
+        qimg = QImage(rgba.data, w, h, 4 * w, QImage.Format_RGBA8888)
+        self._overlay_pixmap = QPixmap.fromImage(qimg).scaled(
+            self.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation
+        )
+
+    # --- Qt overrides ---
 
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -110,21 +160,28 @@ class ImageCanvas(QWidget):
             x = (self.width()  - self._pixmap.width())  // 2
             y = (self.height() - self._pixmap.height()) // 2
             painter.drawPixmap(x, y, self._pixmap)
+        if self._overlay_pixmap is not None:
+            # Overlay pixmap is scaled to the same size, so offsets are identical
+            x = (self.width()  - self._overlay_pixmap.width())  // 2
+            y = (self.height() - self._overlay_pixmap.height()) // 2
+            painter.drawPixmap(x, y, self._overlay_pixmap)
         painter.end()
 
     def resizeEvent(self, event):
-        """Re-scale pixmap to new widget dimensions on resize."""
         self._rebuild_pixmap()
+        self._rebuild_overlay_pixmap()
         super().resizeEvent(event)
 
+
+# ---------------------------------------------------------------------------
+# VolumeViewerWidget
+# ---------------------------------------------------------------------------
 
 class VolumeViewerActions:
     ExampleAction = "example_action"
 
-
 class VolumeViewerToolBarSections:
     ExampleSection = "example_section"
-
 
 class VolumeViewerOptionsMenuSections:
     ExampleSection = "example_section"
@@ -132,124 +189,152 @@ class VolumeViewerOptionsMenuSections:
 
 class VolumeViewerWidget(PluginMainWidget):
 
-    # PluginMainWidget class constants
-    
     def __init__(self, name=None, plugin=None, parent=None):
         super().__init__(name, plugin, parent)
-        
+
         self.global_vars = list(globals().keys())
         self.shellwidget = None
-        self._data = None       # (X, Y, Z, N) float32, C-contiguous
+
+        # Base volume state
+        self._data = None           # (X, Y, Z, N) float32
         self._name = ""
         self._slice_idx = 0
         self._vol_idx = 0
         self._vmin = 0.0
         self._vmax = 1.0
-        
+
+        # Overlay state
+        self._overlay_data = None   # (X, Y, Z, N) float32 or None
+        self._overlay_name = ""
+        self._overlay_vmin = 0.0
+        self._overlay_vmax = 1.0
+
+        # Namespace shape cache: {var_name: tuple}
+        self._ns_shapes = {}
+
         self._build_ui()
         self._test_console_connection()
-        
+
         arr = self._make_test_volume()
-        # Call set_data() directly — skips get_value() / shellwidget completely
         self.set_data(arr, name="test_volume")
 
-    # --- PluginMainWidget API
-    # ------------------------------------------------------------------------
+    # --- UI construction ----------------------------------------------------
+
     def _build_ui(self):
         outer = QVBoxLayout(self)
         outer.setContentsMargins(2, 2, 2, 2)
         outer.setSpacing(2)
 
-        # Toolbar
-        toolbar = QHBoxLayout()
-        self._refresh_btn = QPushButton("↻  Refresh")
+        # ── Top toolbar (Refresh + future global controls) ──────────────────
+        top_toolbar = QHBoxLayout()
+        self._refresh_btn = QPushButton("↻ Refresh")
         self._refresh_btn.setFixedWidth(90)
-        self._refresh_btn.setToolTip("Rescan kernel namespace for numpy arrays or NIFTI objects")
+        self._refresh_btn.setToolTip(
+            "Rescan kernel namespace for numpy arrays or NIFTI objects"
+        )
         self._refresh_btn.clicked.connect(self.refresh_variable_list)
-        toolbar.addWidget(self._refresh_btn)
-        toolbar.addStretch()
-        outer.addLayout(toolbar)
+        top_toolbar.addWidget(self._refresh_btn)
+        top_toolbar.addStretch()
+        outer.addLayout(top_toolbar)
 
-        # Splitter: variable list | image canvas
-        splitter = QSplitter(Qt.Horizontal)
+        # ── Main horizontal splitter: [left panel | right column] ───────────
+        h_splitter = QSplitter(Qt.Horizontal)
 
+        # Left panel: vertical splitter with base list on top, overlay below
+        left_splitter = QSplitter(Qt.Vertical)
+        
         self._listwidget = QListWidget()
         self._listwidget.setMaximumWidth(180)
         self._listwidget.setMinimumWidth(80)
-        self._listwidget.setToolTip("Click to load variable")
+        self._listwidget.setToolTip("Click to load variable as base image")
         self._listwidget.itemClicked.connect(self._on_item_clicked)
-        splitter.addWidget(self._listwidget)
+        
+        left_splitter.addWidget(self._listwidget)
+
+        # Overlay sub-panel (hidden until a base is loaded)
+        self._overlay_panel = QWidget()
+        overlay_layout = QVBoxLayout(self._overlay_panel)
+        overlay_layout.setContentsMargins(0, 4, 0, 0)
+        overlay_layout.setSpacing(2)
+
+        overlay_header = QLabel("Overlays")
+        overlay_header.setStyleSheet("font-weight: bold; color: gray;")
+        overlay_layout.addWidget(overlay_header)
+
+        self._overlay_listwidget = QListWidget()
+        self._overlay_listwidget.setMaximumWidth(180)
+        self._overlay_listwidget.setMinimumWidth(80)
+        self._overlay_listwidget.setToolTip(
+            "Arrays with matching spatial dimensions - click to overlay"
+        )
+        self._overlay_listwidget.itemClicked.connect(self._on_overlay_clicked)
+        overlay_layout.addWidget(self._overlay_listwidget)
+
+        left_splitter.addWidget(self._overlay_panel)
+        self._overlay_panel.setVisible(False)
+
+        left_splitter.setStretchFactor(0, 2)
+        left_splitter.setStretchFactor(1, 1)
+        h_splitter.addWidget(left_splitter)
+
+        # Right column: canvas toolbar + canvas
+        right_col = QWidget()
+        right_layout = QVBoxLayout(right_col)
+        right_layout.setContentsMargins(0, 0, 0, 0)
+        right_layout.setSpacing(2)
+
+        # Canvas toolbar (hidden until an overlay is active; extend here later)
+        self._canvas_toolbar = QWidget()
+        canvas_tb_layout = QHBoxLayout(self._canvas_toolbar)
+        canvas_tb_layout.setContentsMargins(4, 2, 4, 2)
+        canvas_tb_layout.setSpacing(8)
+
+        self._transp_bg_cb = QCheckBox("Transparent BG")
+        self._transp_bg_cb.setToolTip(
+            "Make zero-valued overlay voxels fully transparent"
+        )
+        self._transp_bg_cb.setChecked(False)
+        self._transp_bg_cb.stateChanged.connect(self._on_transp_bg_changed)
+        canvas_tb_layout.addWidget(self._transp_bg_cb)
+        canvas_tb_layout.addStretch()  # future buttons go here
+        
+
+        right_layout.addWidget(self._canvas_toolbar)
+        self._canvas_toolbar.setVisible(False)
 
         self._canvas = ImageCanvas()
         self._canvas.setFocusPolicy(Qt.StrongFocus)
         self._canvas.installEventFilter(self)
-        splitter.addWidget(self._canvas)
+        right_layout.addWidget(self._canvas, stretch=1)
 
-        splitter.setStretchFactor(0, 0)
-        splitter.setStretchFactor(1, 1)
-        outer.addWidget(splitter, stretch=1)
+        h_splitter.addWidget(right_col)
+        h_splitter.setStretchFactor(0, 0)
+        h_splitter.setStretchFactor(1, 1)
+        outer.addWidget(h_splitter, stretch=1)
 
-        # test connection button
-        # self._test_btn = QPushButton("Test Connection")
-        # self._test_btn.clicked.connect(self._test_console_connection)
-        # toolbar.addWidget(self._test_btn) # Add this near your refresh button
-
-        # Status bar
-        self._status = QLabel("No data loaded — select a variable or press ↻ to refresh")
+        # ── Status bar ───────────────────────────────────────────────────────
+        self._status = QLabel(
+            "No data loaded — select a variable or press ↻ to refresh"
+        )
         self._status.setAlignment(Qt.AlignCenter)
         outer.addWidget(self._status)
-    
+
+    # --- Shell / namespace --------------------------------------------------
+
     def set_shellwidget(self, shellwidget):
         self.shellwidget = shellwidget
         self.refresh_variable_list()
-    
+
     def _test_console_connection(self):
-        """
-        Independent test: Asks the kernel for variable names and prints them.
-        """
         try:
             ns = self.shellwidget.call_kernel(blocking=True).get_namespace_view()
             self._status.setText(f"Namespace view success! {ns}")
-            return
         except Exception as e:
             self._status.setText(f"get_namespace_view Error: {e}")
-            return
-        
-        if self.shellwidget is None:
-            print("Test Failed: No shellwidget connected.")
-            self._status.setText("Test Failed: No console.")
-            return
 
-        current_var_list = list(globals().keys())
-        names = [x for x in current_var_list if x not in self.global_vars]
-        print(names)
-        
-        print("--- Testing Console Connection ---")
-        try:
-            # 1. We ask the kernel to run 'dir()' and return the result
-            # get_value() is the most stable way to pull a result back to the plugin
-            current_var_list = list(globals().keys())
-            names = [x for x in current_var_list if x not in self.global_vars]
-            print(names)
-            
-            # if names:
-            #     available_vars = self.shellwidget.get_value(names[0])
-            # names = self.shellwidget.get_value()
-            
-            if names:
-                print(f"Variables found in kernel: {names}")
-                self._status.setText(f"Connected! Found {len(names)} items. {current_var_list}")
-            else:
-                print("Connected, but the global namespace appears empty.")
-                self._status.setText("Connected (empty namespace).")
-                
-        except Exception as e:
-            print(f"Connection Error: {str(e)}")
-            self._status.setText(f"Test Error: {e}")
-            
-    
     def refresh_variable_list(self):
         self._listwidget.clear()
+        self._ns_shapes.clear()
         if self.shellwidget is None:
             self._status.setText("No active console.")
             return
@@ -259,13 +344,30 @@ class VolumeViewerWidget(PluginMainWidget):
                 type_str = (
                     info.get("type", "") if isinstance(info, dict) else str(info)
                 )
+                
                 if "ndarray" in type_str or "array" in type_str.lower():
-                    shape_str = info.get("size", "") if isinstance(info, dict) else ""
+                    shape_arr = info.get("size", "") if isinstance(info, dict) else ""
+                    
+                    if isinstance(shape_arr, str):
+                        shape_tuple = tuple([int(x) for x in shape_arr.strip('()').split(', ')])
+                    elif isinstance(shape_arr, tuple):
+                        shape_tuple = shape_arr
+                    else:
+                        shape_tuple = ()
+                    
+                    # QMessageBox.information(self, "Debug", f"error: {shape_tuple}")
+                        
+                    self._ns_shapes[name] = shape_tuple
+    
+                    
                     item = QListWidgetItem(name)
-                    item.setToolTip(f"{type_str}  {shape_str}")
+                    item.setToolTip(f"{type_str}  {shape_tuple}")
                     self._listwidget.addItem(item)
+                    
         except Exception as e:
             self._status.setText(f"Namespace error: {e}")
+
+    # --- Base image selection -----------------------------------------------
 
     def _on_item_clicked(self, item: QListWidgetItem):
         var_name = item.text()
@@ -280,71 +382,156 @@ class VolumeViewerWidget(PluginMainWidget):
         if not isinstance(arr, np.ndarray):
             self._status.setText(f"'{var_name}' is not a numpy array.")
             return
+
         self.set_data(arr, name=var_name)
-    
-    
+        self._clear_overlay()
+        self._populate_overlay_list(arr.shape[:3])
+        self._overlay_panel.setVisible(True)
+
+    # --- Overlay list -------------------------------------------------------
+
+    def _populate_overlay_list(self, base_spatial: tuple):
+        """Fill overlay list with arrays whose first 3 dims match base_spatial."""
+        self._overlay_listwidget.clear()
+
+        # Always offer a 'None' item to clear the overlay
+        none_item = QListWidgetItem("[ None ]")
+        none_item.setToolTip("Remove overlay")
+        self._overlay_listwidget.addItem(none_item)
+
+        for name, shape in sorted(self._ns_shapes.items()):
+            if name == self._name:
+                continue  # skip the base itself
+            spatial = shape[:3] if len(shape) >= 3 else shape
+            if spatial == base_spatial:
+                item = QListWidgetItem(name)
+                item.setToolTip(f"shape: {shape}")
+                self._overlay_listwidget.addItem(item)
+
+    def _on_overlay_clicked(self, item: QListWidgetItem):
+        var_name = item.text()
+
+        if var_name == "[ None ]":
+            self._clear_overlay()
+            return
+
+        if self.shellwidget is None:
+            return
+        self._status.setText(f"Loading overlay '{var_name}'…")
+        try:
+            arr = self.shellwidget.call_kernel(blocking=True).get_value(var_name)
+        except Exception as e:
+            self._status.setText(f"Could not fetch overlay '{var_name}': {e}")
+            return
+        if not isinstance(arr, np.ndarray):
+            self._status.setText(f"'{var_name}' is not a numpy array.")
+            return
+
+        self.set_overlay(arr, name=var_name)
+
+    # --- Overlay data management --------------------------------------------
+
+    def set_overlay(self, arr: np.ndarray, name: str = ""):
+        if arr.ndim == 2:
+            arr = arr[..., np.newaxis, np.newaxis]
+        if arr.ndim == 3:
+            arr = arr[..., np.newaxis]
+        if arr.ndim != 4:
+            self._status.setText(
+                f"Overlay '{name}': expected 3D or 4D array, got {arr.ndim}D."
+            )
+            return
+
+        self._overlay_data = np.ascontiguousarray(arr, dtype=np.float32)
+        self._overlay_name = name
+        self._overlay_vmin = float(np.percentile(arr, 2))
+        self._overlay_vmax = float(np.percentile(arr, 98))
+
+        self._canvas.set_overlay_params(
+            self._overlay_vmin, self._overlay_vmax, cmap_name="hot"
+        )
+        self._canvas_toolbar.setVisible(True)
+        self._draw()
+        self._update_status()
+
+    def _clear_overlay(self):
+        self._overlay_data = None
+        self._overlay_name = ""
+        self._canvas.clear_overlay()
+        self._canvas_toolbar.setVisible(False)
+        self._transp_bg_cb.setChecked(False)
+        self._update_status()
+
+    # --- Canvas toolbar slots -----------------------------------------------
+
+    def _on_transp_bg_changed(self, state):
+        self._canvas.set_overlay_transp_bg(bool(state))
+
+    # --- Core draw ----------------------------------------------------------
+
+    def _draw(self):
+        if self._data is None:
+            return
+
+        sl = self._data[:, :, self._slice_idx, self._vol_idx]
+        self._canvas.set_slice(sl)
+
+        if self._overlay_data is not None:
+            N_ov = self._overlay_data.shape[3]
+            ov_vol = min(self._vol_idx, N_ov - 1)  # clamp: single-vol overlays stick
+            ov_sl = self._overlay_data[:, :, self._slice_idx, ov_vol]
+            self._canvas.set_overlay_slice(ov_sl)
         
+        self._update_status()
+
+    def _update_status(self):
+        if self._data is None:
+            return
+        X, Y, Z, N = self._data.shape
+        ov_txt = f"  |  overlay: {self._overlay_name}" if self._overlay_data is not None else ""
+        self._status.setText(
+            f"{self._name} | {X}×{Y}×{Z}×{N}"
+            f" | Slice {self._slice_idx}/{Z - 1}"
+            f" | Vol {self._vol_idx}/{N - 1}"
+            f"{ov_txt}"
+        )
+
+    # --- Synthetic test data ------------------------------------------------
+
     def _make_test_volume(self):
-        """
-        Synthetic 4D volume that gives visually distinct slices and volumes.
-        Shape (64, 64, 30, 5) — small enough to be instant, big enough to test navigation.
-        """
         X, Y, Z, N = 64, 64, 30, 5
         x = np.linspace(-1, 1, X)
         y = np.linspace(-1, 1, Y)
         z = np.linspace(-1, 1, Z)
         xx, yy, zz = np.meshgrid(x, y, z, indexing='ij')
-
         volumes = []
         for v in range(N):
-            # Each volume: a Gaussian blob at a different Z offset — easy to see change
             r2 = xx**2 + yy**2 + (zz - 0.1 * v)**2
-            vol = np.exp(-r2 / 0.3)
-            volumes.append(vol)
+            volumes.append(np.exp(-r2 / 0.3))
+        return np.stack(volumes, axis=-1).astype(np.float32)
 
-        arr = np.stack(volumes, axis=-1).astype(np.float32)
-        return arr    
-        
     def set_data(self, arr: np.ndarray, name: str = ""):
         if arr.ndim == 2:
-            arr = arr[..., np.newaxis, np.newaxis]    
-            
+            arr = arr[..., np.newaxis, np.newaxis]
         if arr.ndim == 3:
             arr = arr[..., np.newaxis]
-            
         if arr.ndim != 4:
             self._status.setText(
                 f"'{name}': expected 3D or 4D array, got {arr.ndim}D."
             )
             return
-
-        # Force C-contiguous — nibabel returns Fortran-order arrays
         self._data = np.ascontiguousarray(arr, dtype=np.float32)
         self._name = name
         self._slice_idx = arr.shape[2] // 2
         self._vol_idx = 0
         self._vmin = float(np.percentile(arr, 2))
         self._vmax = float(np.percentile(arr, 98))
-
         self._canvas.set_window(self._vmin, self._vmax)
         self._canvas.setFocus()
         self._draw()
 
-    def _draw(self):
-        if self._data is None:
-            return
-        sl = self._data[:, :, self._slice_idx, self._vol_idx]
-        self._canvas.set_slice(sl)
-        self._update_status()
+    # --- Plugin API ---------------------------------------------------------
 
-    def _update_status(self):
-        X, Y, Z, N = self._data.shape
-        self._status.setText(
-            f"{self._name}  |  {X}×{Y}×{Z}×{N}"
-            f"  |  Slice {self._slice_idx}/{Z - 1}"
-            f"  |  Vol {self._vol_idx}/{N - 1}"
-        )
-    
     def get_title(self):
         return _("VolumeViewer")
 
@@ -352,7 +539,6 @@ class VolumeViewerWidget(PluginMainWidget):
         pass
 
     def setup(self):
-        # Create an example action
         example_action = self.create_action(
             name=VolumeViewerActions.ExampleAction,
             text="Example action",
@@ -360,26 +546,18 @@ class VolumeViewerWidget(PluginMainWidget):
             icon=self.create_icon("spyder"),
             triggered=lambda: print("Example action triggered!"),
         )
-
-        # Add an example action to the plugin options menu
         menu = self.get_options_menu()
         self.add_item_to_menu(
-            example_action,
-            menu,
-            VolumeViewerOptionsMenuSections.ExampleSection,
+            example_action, menu, VolumeViewerOptionsMenuSections.ExampleSection,
         )
-
-        # Add an example action to the plugin toolbar
         toolbar = self.get_main_toolbar()
         self.add_item_to_toolbar(
-            example_action,
-            toolbar,
-            VolumeViewerOptionsMenuSections.ExampleSection,
+            example_action, toolbar, VolumeViewerOptionsMenuSections.ExampleSection,
         )
 
     def update_actions(self):
         pass
-        
+
     def eventFilter(self, obj, event):
         if self._data is None:
             return super().eventFilter(obj, event)
@@ -412,6 +590,3 @@ class VolumeViewerWidget(PluginMainWidget):
     @on_conf_change
     def on_section_conf_change(self, section):
         pass
-
-    # --- Public API
-    # ------------------------------------------------------------------------

@@ -17,6 +17,9 @@ im = dat.get_fdata()
 
 im_new = np.rot90(np.rot90(im))
 
+im_mask = nib.load(os.path.join(datapath, 't1w_brainmask.nii.gz')).get_fdata()>0
+im_mask = im_mask.astype(int)
+
 #%% 
 a = 1
 a = np.array([1])

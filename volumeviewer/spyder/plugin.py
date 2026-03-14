@@ -45,7 +45,7 @@ class VolumeViewer(SpyderDockablePlugin):
         return _("VolumeViewer")
 
     def get_description(self):
-        return _("A dockable Spyder plugin to view 3D and 4D numpy arrays or NIFTI images.")
+        return _("A dockable Spyder plugin to view 3D and 4D numpy arrays")
 
     def get_icon(self):
         return QIcon()
