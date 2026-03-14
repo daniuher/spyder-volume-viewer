@@ -1,3 +1,5 @@
+![Version](https://img.shields.io/github/v/release/daniuher/spyder-volume-viewer)
+
 # spyder-volume-viewer
 Spyder plugin for viewing multi-dimensional numpy arrays
 
