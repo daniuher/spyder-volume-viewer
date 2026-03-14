@@ -1,0 +1,15 @@
+# ----------------------------------------------------------------------------
+# Copyright © 2026, fried-pineapple0
+#
+# Licensed under the terms of the GNU General Public License v3
+# ----------------------------------------------------------------------------
+
+commit_message: '[ci skip] New %language% translation from Crowdin'
+append_commit_message: false
+files:
+  - source: /volumeviewer/spyder/locale/volumeviewer.pot
+    translation: /volumeviewer/volumeviewer/locale/%two_letters_code%/LC_MESSAGES/%file_name%.po
+    languages_mapping:
+      two_letters_code:
+        pt-BR: pt_BR
+        zh-CN: zh_CN
