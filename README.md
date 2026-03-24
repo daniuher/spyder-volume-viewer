@@ -14,6 +14,14 @@ This is a **work in progress**. First stable release (version 1.0.0) is planned 
 - Development on Linux (Debian 12), untested on other OS
 - v0.1.0 is for Spyder 5, most likely not working in Spyder 6
 
+### Installation
+1. either clone the repo or download the latest release.
+2. `cd` yourself into the downloaded folder
+3. (optional) setup a specific virtual environment with Spyder 5
+4. run `pip install .` from the base folder of the plugin.
+
+Stable release will be made available via pypi when ready.  
+
 ### Functionalities
 - [x] view 2D [x], 3D [x], and 4D [x] numpy arrays which are currently loaded in the variable explorer
 - [x] numpy arrays with the same dimensions as the main viewed image can be loaded as overlays
