@@ -6,6 +6,8 @@
 # spyder-volume-viewer
 Spyder plugin for viewing 2D, 3D, and 4D numpy arrays during scripting. The goal is to eliminate the need to constantly save a temporary .nii just to look at it in standalone viewers. 
 
+While developed with MR images in mind, this plugin for any numpy array visualization to guide your scripting.
+
 This is a **work in progress**. First stable release (version 1.0.0) is planned for April 2026.
 
 ### Limitations
