@@ -11,14 +11,14 @@ While developed with MR images in mind, this plugin is fully suitable for any nu
 This is a **work in progress**. First stable release (version 1.0.0) is planned for April 2026.
 
 ### Limitations
-- Development on Linux (Debian 12), untested on other OS
-- v0.1.0 is for Spyder 5, most likely not working in Spyder 6
+- Development on Linux (Debian 12/13), untested on other OS
+- version <1.0.0 is for Spyder 5, most likely not working in Spyder 6
 
 ### Installation
-1. either clone the repo or download the latest release.
+1. either clone the repo or download the latest release
 2. `cd` yourself into the downloaded folder
-3. (optional) setup a specific virtual environment with Spyder 5
-4. run `pip install .` from the base folder of the plugin.
+3. (optional but recommended) setup a specific virtual environment with Spyder 5
+4. run `pip install .` from the base folder of the plugin
 
 Stable release will be made available via pypi when ready.  
 
