@@ -13,27 +13,30 @@ This is a **work in progress**. First stable release (version 1.0.0) is planned 
 - v0.1.0 is for Spyder 5, most likely not working in Spyder 6
 
 ### Functionalities
-[x] view 2D [x], 3D [x], and 4D [x] numpy arrays which are currently loaded in the variable explorer
-[x] numpy arrays with the same dimensions as the main viewed image can be loaded as overlays
-[x] scrolling using mouse wheel through the z-axis
-[x] scrolling using UP and DOWN arrow keys through the z-axis
-[x] scrolling through the volumes (4th dim) using LEFT and RIGHT arrow keys
-[ ] error fixes needed (there's quite a few ... )
-[ ] unload the viewed image (currently only overlay can be removed)
-[ ] possibility to change the axis of visualization so that separete permute within script is not required
-[ ] slider for opacity of overlay
-[ ] implementation for Spyder 6
+- [x] view 2D [x], 3D [x], and 4D [x] numpy arrays which are currently loaded in the variable explorer
+- [x] numpy arrays with the same dimensions as the main viewed image can be loaded as overlays
+- [x] scrolling using mouse wheel through the z-axis
+- [x] scrolling using UP and DOWN arrow keys through the z-axis
+- [x] scrolling through the volumes (4th dim) using LEFT and RIGHT arrow keys
+- [ ] error fixes needed (there's quite a few ... )
+- [ ] unload the viewed image (currently only overlay can be removed)
+- [ ] possibility to change the axis of visualization so that separete permute within script is not required
+- [ ] slider for opacity of overlay
+- [ ] colormap selection
+- [ ] crosshair with voxel value indicator
+- [ ] implementation for Spyder 6
 
 ### Sneek peak
-![Volume viewer (dockable plugin)](screenshots/spyder-volume-viewer_example_dark.png)
 Volume viewer (dockable Spyder plugin). Allows to view and scroll through multi-dimensional numpy arrays during scripting.
+![Volume viewer (dockable plugin)](screenshots/spyder-volume-viewer_example_dark.png)  
 
-<table>
-  <tr>
-    <td><img src="screenshots/spyder-volume-viewer_example_dark_nooverlay.png" width="350"/></td>
-    <td><img src="screenshots/spyder-volume-viewer_example_dark_withoverlay.png" width="350"/></td>
-  </tr>
-</table>
+Click refresh to see available numpy arrays in the sidebar. Then left click to load it in the viewer.
+![Volume viewer - zoomed in - no overlay](screenshots/spyder-volume-viewer_example_dark_nooverlay.png)
+
+Upon loading, the overlay tab appears with matching potential overlays. Left click to load the overlay.
+Option to toggle between transparent background voxels available.
+![Volume viewer - zoomed in - with overlay](screenshots/spyder-volume-viewer_example_dark_withoverlay.png)
+
 
 
 
