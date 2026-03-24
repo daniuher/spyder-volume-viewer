@@ -11,4 +11,7 @@ This is a **work in progress**. First stable release (version 1.0.0) is planned 
 - Development on Linux (Debian 12), untested on other OS
 - v0.1.0 is for Spyder 5, most likely not working in Spyder 6
 
+### Sneek peak
+
+
 
