@@ -2,7 +2,6 @@
 ![Status](https://img.shields.io/badge/status-alpha-orange)
 ![License](https://img.shields.io/github/license/daniuher/spyder-volume-viewer)
 
-
 # spyder-volume-viewer
 Spyder plugin for viewing 2D, 3D, and 4D numpy arrays during scripting. The goal is to eliminate the need to constantly save a temporary .nii just to look at it in standalone viewers. 
 
@@ -48,6 +47,7 @@ Upon loading, the overlay tab appears with matching potential overlays. Left cli
 Option to toggle between transparent background voxels available.
 ![Volume viewer - zoomed in - with overlay](screenshots/spyder-volume-viewer_example_dark_withoverlay.png)
 
+Example data taken from: [The B.A.T.M.A.N. tutorial](https://osf.io/fkyht/overview)
 
 
 
