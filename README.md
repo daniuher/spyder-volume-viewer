@@ -11,6 +11,7 @@ This is a **work in progress**. First stable release (version 1.0.0) is planned 
 
 ### Limitations
 - Development on Linux (Debian 12/13), untested on other OS
+- Developed for Spyder installed via conda. Other python environment managers or Spyder installation approaches are untested.
 - version <1.0.0 is for Spyder 5, most likely not working in Spyder 6
 
 ### Installation
