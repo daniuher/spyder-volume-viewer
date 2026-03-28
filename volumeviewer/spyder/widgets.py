@@ -389,6 +389,7 @@ class VolumeViewerWidget(PluginMainWidget):
             return
         try:
             ns = self.shellwidget.call_kernel(blocking=True).get_namespace_view()
+            
             for name, info in sorted(ns.items()):
                 type_str = (
                     info.get("type", "") if isinstance(info, dict) else str(info)
@@ -396,11 +397,14 @@ class VolumeViewerWidget(PluginMainWidget):
                 
                 if "ndarray" in type_str or "array" in type_str.lower():
                     shape_arr = info.get("size", "") if isinstance(info, dict) else ""
+                    QMessageBox.information(self, "Debug", f"error: {type(shape_arr)}")
                     
                     if isinstance(shape_arr, str):
                         shape_tuple = tuple([int(x) for x in shape_arr.strip('()').split(', ')])
                     elif isinstance(shape_arr, tuple):
                         shape_tuple = shape_arr
+                    elif isinstance(shape_arr, list):
+                        shape_tuple = tuple(shape_arr)
                     else:
                         shape_tuple = ()
                     
@@ -418,20 +422,53 @@ class VolumeViewerWidget(PluginMainWidget):
 
     # --- Base image selection -----------------------------------------------
 
+    # def _on_item_clicked(self, item: QListWidgetItem):
+    #     var_name = item.text()
+    #     QMessageBox.information(self, "Debug", f"error: {var_name}")
+        
+    #     if self.shellwidget is None:
+    #         return
+    #     self._status.setText(f"Loading '{var_name}'…")
+    #     try:
+    #         arr = self.shellwidget.call_kernel(blocking=True).get_value(var_name)
+    #     except Exception as e:
+    #         self._status.setText(f"Could not fetch '{var_name}': {e}")
+    #         return
+    #     if not isinstance(arr, np.ndarray):
+    #         self._status.setText(f"'{var_name}' is not a numpy array.")
+    #         return
+
+    #     self.set_data(arr, name=var_name)
+    #     self._clear_overlay()
+    #     self._populate_overlay_list(arr.shape[:3])
+    #     self._overlay_panel.setVisible(True)
+    
     def _on_item_clicked(self, item: QListWidgetItem):
         var_name = item.text()
         if self.shellwidget is None:
             return
         self._status.setText(f"Loading '{var_name}'…")
         try:
-            arr = self.shellwidget.call_kernel(blocking=True).get_value(var_name)
+            self.shellwidget.call_kernel(
+                interrupt=False,
+                blocking=False,
+                callback=lambda arr: self._on_value_received(var_name, arr),
+            ).get_value(var_name)
         except Exception as e:
             self._status.setText(f"Could not fetch '{var_name}': {e}")
-            return
+    
+    def _on_value_received(self, var_name: str, arr):
+        if isinstance(arr, list):
+            try:
+                arr = np.array(arr)
+            except Exception as e:
+                self._status.setText(f"Could not convert '{var_name}' to array: {e}")
+                return
+            
         if not isinstance(arr, np.ndarray):
-            self._status.setText(f"'{var_name}' is not a numpy array.")
+            self._status.setText(f"'{var_name}' is not a numpy array (got {type(arr).__name__}).")
             return
-
+        
         self.set_data(arr, name=var_name)
         self._clear_overlay()
         self._populate_overlay_list(arr.shape[:3])
@@ -473,8 +510,11 @@ class VolumeViewerWidget(PluginMainWidget):
             self._status.setText(f"Could not fetch overlay '{var_name}': {e}")
             return
         if not isinstance(arr, np.ndarray):
-            self._status.setText(f"'{var_name}' is not a numpy array.")
-            return
+            try:
+                arr = np.array(arr)
+            except Exception as e:
+                self._status.setText(f"'{var_name}' is not a numpy array. {e}")
+                return
 
         self.set_overlay(arr, name=var_name)
 
