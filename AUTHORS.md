@@ -2,7 +2,7 @@
 
 ## Development Lead
 
-* fried-pineapple0 - <spyder.python@gmail.com> - [@spyder-bot](https://github.com/spyder-bot)
+* daniuher - <daniel.uher@ovgu.de>
 
 ## Contributors
 
