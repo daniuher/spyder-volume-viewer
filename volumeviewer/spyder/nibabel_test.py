@@ -10,18 +10,17 @@ import nibabel as nib
 import numpy as np
 import os
 
-datapath = '/home/duher/Downloads/dv26_x250/nifti/'
-dat = nib.load(os.path.join(datapath, 'hm_fg_mp2_0p6_cs4_6000_aon_fastwe_filt_UNI-DEN_22.nii'))
+datapath = '/home/duher/Nextcloud/SFB_1436_Serviceprojekt_Z02/duher/00_misc/14_batman_mrtrix/DWI/'
+dat = nib.load(os.path.join(datapath, '_DTI_17_Richtungen_2.5mm_96_AP_20180524132459_5.nii'))
+imdata = dat.get_fdata()
 
-im = dat.get_fdata()
+mask = nib.load(os.path.join(datapath, 'mask.nii'))
+maskdata = mask.get_fdata()
 
-im_new = np.rot90(np.rot90(im))
+b0 = nib.load(os.path.join(datapath, '_DTI_17_Richtungen_2.5mm_96_AP_20180524132459_5_meanb0.nii'))
+b0data = b0.get_fdata()
 
-im_mask = nib.load(os.path.join(datapath, 't1w_brainmask.nii.gz')).get_fdata()>0
-im_mask = im_mask.astype(int)
+slc = b0data[:,:,30]
 
-#%% 
-a = 1
-a = np.array([1])
 
-slc = im_new[:,:,240]
+
