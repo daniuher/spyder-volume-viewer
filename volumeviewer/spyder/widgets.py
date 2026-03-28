@@ -11,7 +11,7 @@ VolumeViewer Main Widget.
 from qtpy.QtWidgets import (
     QHBoxLayout, QLabel, QPushButton, QSplitter,
     QListWidgetItem, QSizePolicy, QListWidget,
-    QWidget, QVBoxLayout, QCheckBox, QSlider
+    QWidget, QVBoxLayout, QCheckBox, QSlider, QComboBox, QFrame
 )
 from qtpy.QtCore import Qt, QEvent
 from qtpy.QtGui import QImage, QPixmap, QPainter
@@ -42,7 +42,7 @@ class ImageCanvas(QWidget):
     keeping the paint path allocation-free.
     """
 
-    OVERLAY_ALPHA = 255  # 0-255 global overlay opacity
+    # OVERLAY_ALPHA = 255  # 0-255 global overlay opacity
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -60,6 +60,7 @@ class ImageCanvas(QWidget):
         self._overlay_cmap = mcm.get_cmap("hot")
         self._overlay_vmin = 0.0
         self._overlay_vmax = 1.0
+        self._overlay_opacity = 255
         self._overlay_transp_bg = False  # zero-voxels → fully transparent
 
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
@@ -104,6 +105,16 @@ class ImageCanvas(QWidget):
         self._rebuild_overlay_pixmap()
         self.update()
 
+    def set_overlay_opacity(self, slider_value: float):
+        self._overlay_opacity = slider_value
+        self._rebuild_overlay_pixmap()
+        self.update()
+        
+    def set_overlay_cmap(self, cmap_name: str):
+        self._overlay_cmap = mcm.get_cmap(cmap_name)
+        self._rebuild_overlay_pixmap()
+        self.update()
+
     def clear_overlay(self):
         self._overlay_slice = None
         self._overlay_pixmap = None
@@ -140,9 +151,9 @@ class ImageCanvas(QWidget):
         if self._overlay_transp_bg:
             # Zero source voxels → fully transparent; others → OVERLAY_ALPHA
             mask = self._overlay_slice > 0
-            rgba[..., 3] = np.where(mask, self.OVERLAY_ALPHA, 0).astype(np.uint8)
+            rgba[..., 3] = np.where(mask, self._overlay_opacity, 0).astype(np.uint8)
         else:
-            rgba[..., 3] = self.OVERLAY_ALPHA
+            rgba[..., 3] = self._overlay_opacity
 
         rgba = np.ascontiguousarray(rgba)
         h, w = rgba.shape[:2]
@@ -197,6 +208,8 @@ class VolumeViewerWidget(PluginMainWidget):
 
         # Base volume state
         self._data = None           # (X, Y, Z, N) float32
+        self._data_max = None
+        self._data_min = None
         self._name = ""
         self._slice_idx = 0
         self._vol_idx = 0
@@ -215,8 +228,8 @@ class VolumeViewerWidget(PluginMainWidget):
         self._build_ui()
         self._test_console_connection()
 
-        arr = self._make_test_volume()
-        self.set_data(arr, name="test_volume")
+        # arr = self._make_test_volume()
+        # self.set_data(arr, name="test_volume")
 
     # --- UI construction ----------------------------------------------------
 
@@ -296,9 +309,36 @@ class VolumeViewerWidget(PluginMainWidget):
         self._transp_bg_cb.setChecked(False)
         self._transp_bg_cb.stateChanged.connect(self._on_transp_bg_changed)
         canvas_tb_layout.addWidget(self._transp_bg_cb)
-        canvas_tb_layout.addStretch()  # future buttons go here
         
-
+        # ---- Opacity slider ----
+        canvas_tb_layout.addWidget(self._make_separator())
+        opacity_label = QLabel("Opacity:")
+        canvas_tb_layout.addWidget(opacity_label)
+        
+        self._overlay_opacity_slider = QSlider(Qt.Orientation.Horizontal, self)
+        self._overlay_opacity_slider.setRange(0, 255)
+        self._overlay_opacity_slider.setValue(255)
+        self._overlay_opacity_slider.setSingleStep(5)
+        self._overlay_opacity_slider.setPageStep(10)
+        self._overlay_opacity_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+        self._overlay_opacity_slider.valueChanged.connect(self._on_opacitiy_slider_changed)
+        self._overlay_opacity_slider.setFixedWidth(80)
+        
+        # canvas_tb_layout.addWidget(self._overlay_opacity_label)
+        canvas_tb_layout.addWidget(self._overlay_opacity_slider)
+        
+        # -------- Color map selector ----------------
+        canvas_tb_layout.addWidget(self._make_separator())
+        self._cmap_combo = QComboBox()
+        self._cmap_combo.addItems(["hot", "viridis", "gray"])
+        self._cmap_combo.setFixedWidth(80)
+        self._cmap_combo.currentTextChanged.connect(self._on_cmap_changed)
+        canvas_tb_layout.addWidget(self._cmap_combo)
+        
+        # --------------------------------------------
+        # align to left
+        canvas_tb_layout.addStretch(1)
+        
         right_layout.addWidget(self._canvas_toolbar)
         self._canvas_toolbar.setVisible(False)
 
@@ -318,6 +358,15 @@ class VolumeViewerWidget(PluginMainWidget):
         )
         self._status.setAlignment(Qt.AlignCenter)
         outer.addWidget(self._status)
+
+    # --- Helpers ------------------------------------------------------------
+    def _make_separator(self) -> QFrame:
+        """Returns a vertical separator line for use in horizontal toolbars."""
+        sep = QFrame()
+        sep.setFrameShape(QFrame.Shape.VLine)
+        sep.setFrameShadow(QFrame.Shadow.Sunken)
+        sep.setFixedWidth(2)
+        return sep
 
     # --- Shell / namespace --------------------------------------------------
 
@@ -466,6 +515,16 @@ class VolumeViewerWidget(PluginMainWidget):
 
     def _on_transp_bg_changed(self, state):
         self._canvas.set_overlay_transp_bg(bool(state))
+        
+    def _on_opacitiy_slider_changed(self, value):
+        self._canvas.set_overlay_opacity(float(value))
+        
+    def _on_cmap_changed(self, cmap_name: str) -> None:
+        # if not hasattr(self, '_overlay') or self._overlay is None:
+        #     return
+        # safe to proceed
+        # QMessageBox.information(self, "Debug", f"{cmap_name}")
+        self._canvas.set_overlay_cmap(cmap_name)  
 
     # --- Core draw ----------------------------------------------------------
 
@@ -488,12 +547,18 @@ class VolumeViewerWidget(PluginMainWidget):
         if self._data is None:
             return
         X, Y, Z, N = self._data.shape
-        ov_txt = f"  |  overlay: {self._overlay_name}" if self._overlay_data is not None else ""
+        ov_txt = f" |  overlay: {self._overlay_name}" if self._overlay_data is not None else ""
+        
+        range_txt = ""
+        if self._data_min is not None and self._data_max is not None:
+            range_txt = f" | Vol range {self._data_min[self._vol_idx]:.2f}–{self._data_max[self._vol_idx]:.2f}"
+        
         self._status.setText(
             f"{self._name} | {X}×{Y}×{Z}×{N}"
             f" | Slice {self._slice_idx}/{Z - 1}"
             f" | Vol {self._vol_idx}/{N - 1}"
-            f"{ov_txt}"
+            f" {range_txt}"
+            f" {ov_txt}"
         )
 
     # --- Synthetic test data ------------------------------------------------
@@ -520,7 +585,10 @@ class VolumeViewerWidget(PluginMainWidget):
                 f"'{name}': expected 3D or 4D array, got {arr.ndim}D."
             )
             return
+        
         self._data = np.ascontiguousarray(arr, dtype=np.float32)
+        self._data_max = np.max(self._data, axis=(0,1,2))
+        self._data_min = np.min(self._data, axis=(0,1,2))
         self._name = name
         self._slice_idx = arr.shape[2] // 2
         self._vol_idx = 0
