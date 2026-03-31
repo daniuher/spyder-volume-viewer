@@ -29,6 +29,7 @@ Stable release will be made available via pypi when ready.
 - [x] scrolling using UP and DOWN arrow keys through the z-axis
 - [x] scrolling through the volumes (4th dim) using LEFT and RIGHT arrow keys
 - [x] volume value ranges within loaded image shown at the bottom infobar
+- [ ] On refresh, immediately update the overlay list so that base image does not have to be reloaded
 - [ ] mouse wheel scrolling is very sensitive now, needs to be calibrated
 - [ ] unload the viewed image (currently only overlay can be removed)
 - [ ] possibility to change the axis of visualization so that separate permute within script is not required
