@@ -384,6 +384,12 @@ class VolumeViewerWidget(PluginMainWidget):
     def refresh_variable_list(self):
         self._listwidget.clear()
         self._ns_shapes.clear()
+        
+        # Always offer a 'None' item to clear the overlay
+        none_item = QListWidgetItem("[ None ]")
+        none_item.setToolTip("Unload base image")
+        self._listwidget.addItem(none_item)
+        
         if self.shellwidget is None:
             self._status.setText("No active console.")
             return
@@ -397,7 +403,7 @@ class VolumeViewerWidget(PluginMainWidget):
                 
                 if "ndarray" in type_str or "array" in type_str.lower():
                     shape_arr = info.get("size", "") if isinstance(info, dict) else ""
-                    QMessageBox.information(self, "Debug", f"error: {type(shape_arr)}")
+                    # QMessageBox.information(self, "Debug", f"error: {type(shape_arr)}")
                     
                     if isinstance(shape_arr, str):
                         shape_tuple = tuple([int(x) for x in shape_arr.strip('()').split(', ')])
@@ -411,7 +417,6 @@ class VolumeViewerWidget(PluginMainWidget):
                     # QMessageBox.information(self, "Debug", f"error: {shape_tuple}")
                         
                     self._ns_shapes[name] = shape_tuple
-    
                     
                     item = QListWidgetItem(name)
                     item.setToolTip(f"{type_str}  {shape_tuple}")
@@ -447,6 +452,10 @@ class VolumeViewerWidget(PluginMainWidget):
         var_name = item.text()
         if self.shellwidget is None:
             return
+        if var_name == "[ None ]":
+            self._unload_base_image()
+            return
+        
         self._status.setText(f"Loading '{var_name}'…")
         try:
             self.shellwidget.call_kernel(
@@ -473,6 +482,31 @@ class VolumeViewerWidget(PluginMainWidget):
         self._clear_overlay()
         self._populate_overlay_list(arr.shape[:3])
         self._overlay_panel.setVisible(True)
+
+    def _unload_base_image(self):
+        self._data = None
+        self._data_max = None
+        self._data_min = None
+        self._name = ""
+        self._slice_idx = 0
+        self._vol_idx = 0
+        self._vmin = 0.0
+        self._vmax = 1.0
+        
+        self._canvas._pixmap = None
+        self._canvas._raw_slice = None
+        
+        self._overlay_data = None
+        self._overlay_name = ""
+        self._canvas.clear_overlay()
+        self._canvas_toolbar.setVisible(False)
+        self._transp_bg_cb.setChecked(False)
+        
+        self._overlay_listwidget.clear()
+        self._overlay_panel.setVisible(False)
+        
+        self._update_status()
+        self._draw()
 
     # --- Overlay list -------------------------------------------------------
 
