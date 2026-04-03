@@ -29,15 +29,20 @@ Stable release will be made available via pypi when ready.
 - [x] scrolling using UP and DOWN arrow keys through the z-axis
 - [x] scrolling through the volumes (4th dim) using LEFT and RIGHT arrow keys
 - [x] volume value ranges within loaded image shown at the bottom infobar
+<<<<<<< HEAD
 - [ ] On refresh, immediately update the overlay list so that base image does not have to be reloaded
 - [ ] mouse wheel scrolling is very sensitive now, needs to be calibrated
 - [ ] unload the viewed image (currently only overlay can be removed)
+=======
+- [x] mouse wheel scrolling is very sensitive now, needs to be calibrated
+- [x] unload the viewed image (currently only overlay can be removed)
+>>>>>>> dev
 - [ ] possibility to change the axis of visualization so that separate permute within script is not required
 - [x] slider for opacity of overlay
 - [x] colormap selection for overlay
 - [ ] colormap selection for base image
 - [ ] crosshair with voxel value indicator
-- [ ] implementation for Spyder 6
+- [x] implementation for Spyder 6
 
 ### Sneek peak
 Volume viewer (dockable Spyder plugin). Allows to view and scroll through multi-dimensional numpy arrays during scripting.
