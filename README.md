@@ -5,20 +5,20 @@
 # spyder-volume-viewer
 Spyder plugin for viewing 2D, 3D, and 4D numpy arrays during scripting. The goal is to eliminate the need to constantly use explicit plotting or saving a temporary files just to look at them in standalone viewers. 
 
-While developed with MR images in mind, this plugin is fully suitable for any numpy array visualization to guide your scripting.
+While developed with MR images in mind, this plugin is fully suitable for any numpy array visualization to guide your scripting.  
 
 This is a **work in progress**. First stable release (version 1.0.0) is planned for April 2026.
 
 ### Limitations
 - Development on Linux (Debian 12/13), untested on other OS
 - Developed for Spyder installed via conda. Other python environment managers or Spyder installation approaches are untested.
-- version <1.0.0 is for Spyder 5, most likely not working in Spyder 6
+- The plugin works significantly faster with Spyder 5 compared with Spyder 6 (likely for reasons beyond my current skillset)
 
 ### Installation
 1. either clone the repo or download the latest release
 2. `cd` yourself into the downloaded folder
 3. (optional but recommended) setup a specific virtual environment with Spyder 5
-4. run `pip install .` from the base folder of the plugin
+4. run `pip install .` from the base folder of the plugin (or `pip install -e .` to point to this installation specifically)
 
 Stable release will be made available via pypi when ready.  
 
@@ -29,17 +29,17 @@ Stable release will be made available via pypi when ready.
 - [x] scrolling using UP and DOWN arrow keys through the z-axis
 - [x] scrolling through the volumes (4th dim) using LEFT and RIGHT arrow keys
 - [x] volume value ranges within loaded image shown at the bottom infobar
-- [ ] On refresh, immediately update the overlay list so that base image does not have to be reloaded
 - [x] mouse wheel scrolling is very sensitive now, needs to be calibrated
 - [x] unload the viewed image (currently only overlay can be removed)
 - [x] mouse wheel scrolling is very sensitive now, needs to be calibrated
 - [x] unload the viewed image (currently only overlay can be removed)
-- [ ] possibility to change the axis of visualization so that separate permute within script is not required
 - [x] slider for opacity of overlay
+- [x] implementation for Spyder 6
 - [x] colormap selection for overlay
 - [ ] colormap selection for base image
 - [ ] crosshair with voxel value indicator
-- [x] implementation for Spyder 6
+- [ ] On refresh, immediately update the overlay list so that base image does not have to be reloaded
+- [ ] possibility to change the axis of visualization so that separate permute within script is not required
 
 ### Sneek peak
 Volume viewer (dockable Spyder plugin). Allows to view and scroll through multi-dimensional numpy arrays during scripting.
